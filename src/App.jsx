@@ -1,54 +1,175 @@
 import React, { useState, useEffect } from 'react';
 import './App.css';
-import FeedbackForm from './components/FeedbackForm';
 
 function App() {
-  const [isFormOpen, setIsFormOpen] = useState(false);
-
+  const [showForm, setShowForm] = useState(false);
+  
   const openForm = () => {
-    setIsFormOpen(true);
-    window.history.pushState({ formOpen: true }, '', '?feedback=open');
+    setShowForm(true);
+    window.history.pushState({ form: true }, '', '?form=open');
   };
-
+  
   const closeForm = () => {
-    setIsFormOpen(false);
-    if (window.location.search.includes('feedback=open')) {
+    setShowForm(false);
+    if (window.location.search.includes('form=open')) {
       window.history.back();
     }
   };
-
+  
   useEffect(() => {
-    const handlePopState = () => setIsFormOpen(false);
+    const handlePopState = () => setShowForm(false);
     window.addEventListener('popstate', handlePopState);
     
-    if (window.location.search.includes('feedback=open')) {
-      setIsFormOpen(true);
+    if (window.location.search.includes('form=open')) {
+      setShowForm(true);
     }
-
+    
     return () => window.removeEventListener('popstate', handlePopState);
   }, []);
-
+  
   return (
-    <div className="app">
-      <header className="header">
-        <h1>Сайт</h1>
-      </header>
+    <div className="container">
+      <button className="open-button" onClick={openForm}>
+        Открыть форму
+      </button>
+      
+      {showForm && <FeedbackPopup onClose={closeForm} />}
+    </div>
+  );
+}
 
-      <main className="content">
-        <p>Контент страницы.</p>
-        <button className="open-btn" onClick={openForm}>
-          Обратная связь
-        </button>
-      </main>
-
-      {isFormOpen && (
-        <div className="popup-overlay" onClick={closeForm}>
-          <div className="popup" onClick={(e) => e.stopPropagation()}>
-            <button className="close-btn" onClick={closeForm}>×</button>
-            <FeedbackForm onClose={closeForm} />
+function FeedbackPopup({ onClose }) {
+  const [formData, setFormData] = useState(() => {
+    const saved = localStorage.getItem('feedbackData');
+    return saved ? JSON.parse(saved) : {
+      name: '',
+      email: '',
+      phone: '',
+      company: '',
+      message: '',
+      agree: false
+    };
+  });
+  
+  const [status, setStatus] = useState('');
+  
+  const handleChange = (e) => {
+    const { name, value, type, checked } = e.target;
+    setFormData(prev => ({
+      ...prev,
+      [name]: type === 'checkbox' ? checked : value
+    }));
+  };
+  
+  const saveToStorage = () => {
+    localStorage.setItem('feedbackData', JSON.stringify(formData));
+  };
+  
+  const handleSubmit = async (e) => {
+    e.preventDefault();
+    
+    if (!formData.agree) {
+      setStatus('Требуется согласие');
+      return;
+    }
+    
+    try {
+      const response = await fetch('https://httpbin.org/post', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(formData)
+      });
+      
+      if (response.ok) {
+        setStatus('Отправлено');
+        setFormData({
+          name: '', email: '', phone: '', company: '', message: '', agree: false
+        });
+        localStorage.removeItem('feedbackData');
+        setTimeout(onClose, 1500);
+      } else {
+        setStatus('Ошибка');
+      }
+    } catch {
+      setStatus('Ошибка сети');
+    }
+  };
+  
+  useEffect(() => {
+    const timer = setInterval(saveToStorage, 1000);
+    return () => clearInterval(timer);
+  }, [formData]);
+  
+  return (
+    <div className="overlay" onClick={onClose}>
+      <div className="form-popup" onClick={e => e.stopPropagation()}>
+        <button className="close-button" onClick={onClose}>×</button>
+        
+        <form onSubmit={handleSubmit}>
+          <h3>Обратная связь</h3>
+          
+          <input
+            type="text"
+            name="name"
+            placeholder="ФИО *"
+            value={formData.name}
+            onChange={handleChange}
+            required
+          />
+          
+          <input
+            type="email"
+            name="email"
+            placeholder="Email *"
+            value={formData.email}
+            onChange={handleChange}
+            required
+          />
+          
+          <input
+            type="tel"
+            name="phone"
+            placeholder="Телефон"
+            value={formData.phone}
+            onChange={handleChange}
+          />
+          
+          <input
+            type="text"
+            name="company"
+            placeholder="Организация"
+            value={formData.company}
+            onChange={handleChange}
+          />
+          
+          <textarea
+            name="message"
+            placeholder="Сообщение *"
+            value={formData.message}
+            onChange={handleChange}
+            required
+            rows="4"
+          />
+          
+          <label className="checkbox">
+            <input
+              type="checkbox"
+              name="agree"
+              checked={formData.agree}
+              onChange={handleChange}
+              required
+            />
+            Согласен с политикой *
+          </label>
+          
+          {status && <div className="status">{status}</div>}
+          
+          <div className="buttons">
+            <button type="button" onClick={onClose}>Отмена</button>
+            <button type="submit">Отправить</button>
           </div>
-        </div>
-      )}
+        </form>
+      </div>
     </div>
   );
 }
